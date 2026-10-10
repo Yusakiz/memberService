@@ -3,6 +3,7 @@ package com.example.memberplatform;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -131,6 +132,13 @@ class MemberApiIntegrationTests {
                 .andExpect(status().isForbidden());
 
         CsrfSession csrf = getCsrf(null);
+        mockMvc.perform(put("/api/members/me")
+                        .session(csrf.session())
+                        .header(csrf.headerName(), csrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"member_1\",\"nickname\":\"未登入\"}"))
+                .andExpect(status().isUnauthorized());
+
         mockMvc.perform(post("/api/auth/login")
                         .session(csrf.session())
                         .header(csrf.headerName(), csrf.token())
