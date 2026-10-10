@@ -1,53 +1,14 @@
-# Project-local development tools
 .tools/
-
-# Java / Maven build output
 backend/target/
-target/
-*.class
-*.jar
-*.war
-*.ear
-
-# Vue / Vite / npm output
+backend/data/*.db*
 frontend/node_modules/
-node_modules/
 frontend/dist/
-dist/
-*.tsbuildinfo
-
-# Runtime SQLite databases and sidecar files
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
-*.sqlite
-*.sqlite3
-
-# Logs and runtime files
 *.log
-logs/
-*.pid
-
-# Environment files and local secrets
 .env
 .env.*
 !.env.example
-
-# IDE and operating-system personal files
 .idea/
 .vscode/
 *.iml
-*.ipr
-*.iws
-.classpath
-.project
-.settings/
-.factorypath
 .DS_Store
 Thumbs.db
-Desktop.ini
-
-# Maven Wrapper and package lock files are intentionally tracked:
-# backend/mvnw, backend/mvnw.cmd, backend/.mvn/wrapper/*
-# frontend/package-lock.json

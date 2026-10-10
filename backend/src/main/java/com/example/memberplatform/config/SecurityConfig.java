@@ -1,24 +1,19 @@
 package com.example.memberplatform.config;
 
 import java.io.IOException;
+import java.util.Locale;
 
-import com.example.memberplatform.dto.MemberResponse;
-import com.example.memberplatform.error.ApiError;
-import com.example.memberplatform.member.MemberService;
-import com.example.memberplatform.security.JsonResponseWriter;
-import com.example.memberplatform.security.ExistingMemberFilter;
-import com.example.memberplatform.security.MemberPrincipal;
+import com.example.memberplatform.dao.MemberDao;
 import jakarta.servlet.http.HttpServletResponse;
-import tools.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
 @Configuration
@@ -30,67 +25,51 @@ public class SecurityConfig {
     }
 
     @Bean
-    FilterRegistrationBean<ExistingMemberFilter> existingMemberFilterRegistration(
-            ExistingMemberFilter existingMemberFilter) {
-        FilterRegistrationBean<ExistingMemberFilter> registration =
-                new FilterRegistrationBean<>(existingMemberFilter);
-        registration.setEnabled(false);
-        return registration;
+    UserDetailsService userDetailsService(MemberDao memberDao) {
+        return rawUsername -> memberDao.findByUsername(rawUsername.trim().toLowerCase(Locale.ROOT))
+                .map(member -> User.withUsername(member.username())
+                        .password(member.passwordHash())
+                        .roles("MEMBER")
+                        .build())
+                .orElseThrow(() -> new UsernameNotFoundException("會員不存在"));
     }
 
     @Bean
-    HttpSessionCsrfTokenRepository csrfTokenRepository() {
-        HttpSessionCsrfTokenRepository repository = new HttpSessionCsrfTokenRepository();
-        repository.setHeaderName("X-CSRF-TOKEN");
-        return repository;
-    }
-
-    @Bean
-    SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            HttpSessionCsrfTokenRepository csrfTokenRepository,
-            ObjectMapper objectMapper,
-            MemberService memberService,
-            ExistingMemberFilter existingMemberFilter) throws Exception {
-        JsonResponseWriter json = new JsonResponseWriter(objectMapper);
+    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        HttpSessionCsrfTokenRepository csrfRepository = new HttpSessionCsrfTokenRepository();
+        csrfRepository.setHeaderName("X-CSRF-TOKEN");
 
         http
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository))
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/csrf", "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .formLogin(form -> form
                         .loginProcessingUrl("/api/auth/login")
-                        .successHandler((request, response, authentication) -> {
-                            MemberPrincipal principal = (MemberPrincipal) authentication.getPrincipal();
-                            json.write(response, HttpServletResponse.SC_OK,
-                                    MemberResponse.from(memberService.getRequired(principal.getMemberId())));
-                        })
-                        .failureHandler((request, response, exception) -> json.write(
-                                response,
-                                HttpServletResponse.SC_UNAUTHORIZED,
-                                new ApiError("帳號或密碼錯誤"))))
+                        .successHandler((request, response, authentication) ->
+                                writeJson(response, 200, "登入成功"))
+                        .failureHandler((request, response, exception) ->
+                                writeJson(response, 401, "帳號或密碼錯誤")))
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .invalidateHttpSession(true)
-                        .clearAuthentication(true)
                         .deleteCookies("JSESSIONID")
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, exception) -> json.write(
-                                response,
-                                HttpServletResponse.SC_UNAUTHORIZED,
-                                new ApiError("請先登入")))
-                        .accessDeniedHandler((request, response, exception) -> json.write(
-                                response,
-                                HttpStatus.FORBIDDEN.value(),
-                                new ApiError("CSRF 驗證失敗，請重新整理後再試"))))
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, error) ->
+                                writeJson(response, 401, "請先登入"))
+                        .accessDeniedHandler((request, response, error) ->
+                                writeJson(response, 403, "安全驗證失敗，請重新整理後再試")))
                 .requestCache(cache -> cache.disable());
 
-        http.addFilterAfter(existingMemberFilter, SecurityContextHolderFilter.class);
-
         return http.build();
+    }
+
+    private void writeJson(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"message\":\"" + message + "\"}");
     }
 }

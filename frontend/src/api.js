@@ -1,106 +1,66 @@
 let csrf = null
 
 export class ApiError extends Error {
-  constructor(message, status, fieldErrors = {}) {
+  constructor(message, status) {
     super(message)
-    this.name = 'ApiError'
     this.status = status
-    this.fieldErrors = fieldErrors
   }
 }
 
-async function parseResponse(response) {
-  if (response.status === 204) return null
-  const type = response.headers.get('content-type') || ''
-  return type.includes('application/json') ? response.json() : null
-}
-
 async function request(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    ...options,
-  })
-  const body = await parseResponse(response)
+  const response = await fetch(path, { credentials: 'same-origin', ...options })
+  const body = response.status === 204 ? null : await response.json().catch(() => null)
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) csrf = null
-    throw new ApiError(body?.message || '系統發生錯誤，請稍後再試', response.status, body?.fieldErrors)
+    throw new ApiError(body?.message || '操作失敗', response.status)
   }
   return body
 }
 
-export async function refreshCsrf() {
-  csrf = await request('/api/auth/csrf')
+async function getCsrf() {
+  if (!csrf) csrf = await request('/api/auth/csrf')
   return csrf
 }
 
-async function writeRequest(path, options = {}) {
-  if (!csrf) await refreshCsrf()
+async function write(path, options) {
+  const token = await getCsrf()
   return request(path, {
     ...options,
-    headers: {
-      ...options.headers,
-      [csrf.headerName]: csrf.token,
-    },
+    headers: { ...options.headers, [token.headerName]: token.token },
   })
 }
 
-export function getMe() {
-  return request('/api/members/me')
-}
+export const getMe = () => request('/api/members/me')
 
-export function register(data) {
-  return writeRequest('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-}
+export const register = (data) => write('/api/auth/register', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+})
 
 export async function login(username, password) {
-  const form = new URLSearchParams({ username, password })
-  const member = await writeRequest('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form,
+  const body = new URLSearchParams({ username, password })
+  await write('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
   })
   csrf = null
-  await refreshCsrf()
-  return member
 }
 
 export async function logout() {
-  await writeRequest('/api/auth/logout', { method: 'POST' })
+  await write('/api/auth/logout', { method: 'POST' })
   csrf = null
-  await refreshCsrf()
 }
 
-export function searchMembers(field, keyword, page) {
-  const query = new URLSearchParams({ field, keyword, page: String(page) })
-  return request(`/api/members?${query}`)
-}
+export const searchMembers = (field, keyword) =>
+  request(`/api/members?${new URLSearchParams({ field, keyword })}`)
 
-export async function updateProfile(data) {
-  const result = await writeRequest('/api/members/me', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+export async function updateMember(data) {
+  const result = await write('/api/members/me', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   })
   if (result.reLoginRequired) csrf = null
   return result
 }
 
-export async function changePassword(data) {
-  const result = await writeRequest('/api/members/me/password', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
+export async function deleteMember() {
+  await write('/api/members/me', { method: 'DELETE' })
   csrf = null
-  return result
-}
-
-export async function deleteAccount() {
-  const result = await writeRequest('/api/members/me', { method: 'DELETE' })
-  csrf = null
-  return result
 }
