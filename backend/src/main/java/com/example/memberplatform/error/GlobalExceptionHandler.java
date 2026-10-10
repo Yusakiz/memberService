@@ -8,6 +8,7 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -30,6 +31,11 @@ public class GlobalExceptionHandler {
             fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
         return ResponseEntity.badRequest().body(new ApiError("輸入資料有誤", fieldErrors));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        return ResponseEntity.badRequest().body(new ApiError("查詢參數格式錯誤"));
     }
 
     @ExceptionHandler(Exception.class)

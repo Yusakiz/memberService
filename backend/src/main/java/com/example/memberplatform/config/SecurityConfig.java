@@ -6,16 +6,19 @@ import com.example.memberplatform.dto.MemberResponse;
 import com.example.memberplatform.error.ApiError;
 import com.example.memberplatform.member.MemberService;
 import com.example.memberplatform.security.JsonResponseWriter;
+import com.example.memberplatform.security.ExistingMemberFilter;
 import com.example.memberplatform.security.MemberPrincipal;
 import jakarta.servlet.http.HttpServletResponse;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
 @Configuration
@@ -24,6 +27,15 @@ public class SecurityConfig {
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    FilterRegistrationBean<ExistingMemberFilter> existingMemberFilterRegistration(
+            ExistingMemberFilter existingMemberFilter) {
+        FilterRegistrationBean<ExistingMemberFilter> registration =
+                new FilterRegistrationBean<>(existingMemberFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -38,7 +50,8 @@ public class SecurityConfig {
             HttpSecurity http,
             HttpSessionCsrfTokenRepository csrfTokenRepository,
             ObjectMapper objectMapper,
-            MemberService memberService) throws Exception {
+            MemberService memberService,
+            ExistingMemberFilter existingMemberFilter) throws Exception {
         JsonResponseWriter json = new JsonResponseWriter(objectMapper);
 
         http
@@ -75,6 +88,8 @@ public class SecurityConfig {
                                 HttpStatus.FORBIDDEN.value(),
                                 new ApiError("CSRF 驗證失敗，請重新整理後再試"))))
                 .requestCache(cache -> cache.disable());
+
+        http.addFilterAfter(existingMemberFilter, SecurityContextHolderFilter.class);
 
         return http.build();
     }

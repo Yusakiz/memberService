@@ -60,4 +60,59 @@ public class MemberRepository {
         }
         return new Member(key.longValue(), username, nickname, passwordHash);
     }
+
+    public boolean existsByUsernameExcludingId(String username, long excludedId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM members WHERE username = ? AND id <> ?",
+                Integer.class,
+                username,
+                excludedId);
+        return count != null && count > 0;
+    }
+
+    public List<Member> searchByUsername(String escapedKeyword, long offset, int limit) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, username, nickname, password_hash
+                FROM members
+                WHERE username LIKE ? ESCAPE '\\'
+                ORDER BY id ASC
+                LIMIT ? OFFSET ?
+                """,
+                MEMBER_ROW_MAPPER,
+                "%" + escapedKeyword + "%",
+                limit,
+                offset);
+    }
+
+    public List<Member> searchByNickname(String escapedKeyword, long offset, int limit) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, username, nickname, password_hash
+                FROM members
+                WHERE nickname LIKE ? ESCAPE '\\' COLLATE NOCASE
+                ORDER BY id ASC
+                LIMIT ? OFFSET ?
+                """,
+                MEMBER_ROW_MAPPER,
+                "%" + escapedKeyword + "%",
+                limit,
+                offset);
+    }
+
+    public void updateProfile(long id, String username, String nickname) {
+        jdbcTemplate.update(
+                "UPDATE members SET username = ?, nickname = ? WHERE id = ?",
+                username,
+                nickname,
+                id);
+    }
+
+    public void updatePassword(long id, String passwordHash) {
+        jdbcTemplate.update("UPDATE members SET password_hash = ? WHERE id = ?", passwordHash, id);
+    }
+
+    public void delete(long id) {
+        jdbcTemplate.update("DELETE FROM members WHERE id = ?", id);
+    }
 }
